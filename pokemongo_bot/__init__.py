@@ -14,7 +14,7 @@ from pgoapi import PGoApi
 from pgoapi.utilities import f2i
 
 import logger
-from cell_workers import CatchVisiblePokemonWorker, PokemonCatchWorker, SeenFortWorker, MoveToFortWorker, InitialTransferWorker, EvolveAllWorker, RecycleItemsWorker
+from cell_workers import CatchVisiblePokemonWorker, PokemonCatchWorker, SeenFortWorker, MoveToFortWorker, PokemonTransferWorker, EvolveAllWorker, RecycleItemsWorker
 from cell_workers.utils import distance, get_cellid, encode, i2f
 from human_behaviour import sleep
 from item_list import Item
@@ -160,7 +160,7 @@ class PokemonGoBot(object):
         # Check if session token has expired
         self.check_session(position)
 
-        worker = InitialTransferWorker(self)
+        worker = PokemonTransferWorker(self)
         if worker.work() == WorkerResult.RUNNING:
             return
 
@@ -227,6 +227,12 @@ class PokemonGoBot(object):
                 self.login()
 
 
+
+    def login_server_busy(self):
+        logger.log('[X] Login Error, server busy', 'red')
+        logger.log('[X] Waiting 10 seconds to try again', 'red')
+        time.sleep(10)
+            
     def login(self):
         logger.log('Attempting login to Pokemon Go.', 'white')
         self.api._auth_token = None
@@ -235,15 +241,21 @@ class PokemonGoBot(object):
         lat, lng = self.position[0:2]
         self.api.set_position(lat, lng, 0)
 
-        while not self.api.login(self.config.auth_service,
-                               str(self.config.username),
-                               str(self.config.password)):
-
-            logger.log('[X] Login Error, server busy', 'red')
-            logger.log('[X] Waiting 10 seconds to try again', 'red')
-            time.sleep(10)
+        while True:
+            try:
+                while not self.api.login(self.config.auth_service,
+                                         str(self.config.username),
+                                         str(self.config.password)):
+                    self.login_server_busy()
+                break
+            except KeyboardInterrupt:
+                print 'KeyboardInterrupt!, exiting'
+                sys.exit(0)
+            except:
+                self.login_server_busy()
 
         logger.log('Login to Pokemon Go successful.', 'green')
+        
 
     def _setup_api(self):
         # instantiate pgoapi
